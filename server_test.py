@@ -4,7 +4,7 @@ import threading
 from pytun import *
 
 
-class server:
+class Server:
     def __init__(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(('', 53))
@@ -33,3 +33,13 @@ class server:
             packet = query.reply()
             packet.add_answer(RR(query.questions[0], QTYPE.TXT, rdata=data))
             self.sock.sendto(packet.pack(), addr)
+
+    def run(self):
+        task = threading.Thread(target=self.packetsRead)
+        task.start()
+        self.tunReader()
+
+
+if __name__ == '__main__':
+    server = Server()
+    server.run()
