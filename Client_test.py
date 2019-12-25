@@ -1,7 +1,10 @@
 import socket
 import selectors
 import pytun
-import dnslib
+import dns.message
+import dns.name
+import dns.query
+import dns.resolver
 import base64
 
 server_domain = 'group-17.cs305.fun'
@@ -22,7 +25,7 @@ class client:
         self.sel.register(self.socket, selectors.EVENT_READ, self.socketReader)
 
     def dnsAssemble(self, domain):
-        packet = dnslib.DNSRecord.question(domain, 'TXT')
+        packet = dns.message.make_query(domain, 'TXT')
         packet = packet.pack()
         return packet
 
@@ -36,8 +39,8 @@ class client:
 
     def socketReader(self, sock, mask):
         data = sock.recv(1024)
-        packet = dnslib.DNSRecord.parse(data)
-        response = packet.a
+        packet = dns.message.from_wire(data)
+        response = packet.answer[0]
         response = base64.b64decode(str(response))
         self.tun.write(response)
         packet = self.dnsAssemble(server_domain)
