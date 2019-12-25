@@ -1,7 +1,11 @@
 import socket
 import selectors
 import pytun
-import dnslib
+import dns.message
+import dns.name
+import dns.query
+import dns.resolver
+import dns.rrset
 import base64
 
 
@@ -21,10 +25,11 @@ class client:
         self.pool = []
 
     def dnsAssemble(self, data):
-        packet = dnslib.DNSRecord.parse(self.pool[0])
+        question = self.pool[0]
+        packet = dns.message.make_response(question, recursion_available=True)
         del self.pool[0]
-        reply = packet.reply()
-        reply.add_answer(dnslib.RR(packet.questions[0], dnslib.QTYPE.TXT, rdata=data))
+        packet.answer.append(dns.rrset.from_text(
+            question.question[0].name, 30000, 1, 'TXT', str(base64.b64encode(data), encoding='ascii')))
         return packet
 
     def tunReader(self, tun, mask):
@@ -36,11 +41,14 @@ class client:
 
     def socketReader(self, sock, mask):
         data = sock.recv(1024)
-        packet = dnslib.DNSRecord.parse(data)
+        packet = dns.message.from_wire(data)
+        domain = str(packet.question[0].name)
+        print(domain)
+        domain = domain[:-20]
+        print(domain)
         self.pool.append(packet)
-        response = packet.a
-        response = base64.b64decode(str(response))
-        self.tun.write(response)
+        data = base64.b64decode(domain)
+        self.tun.write(data)
 
     def run(self):
         while True:
