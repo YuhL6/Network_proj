@@ -1,37 +1,24 @@
-
-
+import sys
+import optparse
 import socket
 import select
-
-
-
-
-
+import errno
 import pytun
 import dns.message
 import dns.name
 import dns.query
-
-
-
+import dns.resolver
 import base64 as coder
 import time
 import queue
-
-
-local_addr = '10.20.0.1'
-dst_addr = '10.20.0.2'
+local_addr = '10.9.0.1'
+dst_addr = '10.9.0.2'
 local_mask = '255.255.255.0'
 remote_dns_addr = '120.78.166.34'
-# remote_dns_addr = '52.82.37.174'
-
-
-
-
-
+#remote_dns_addr = '52.82.46.4'
 remote_dns_port = 53
-mtu = 130
-query_root_name = 'group-30.cs305.fun'
+mtu = 160
+query_root_name = 'group-10.cs305.fun'
 label_len = 63
 
 
@@ -45,17 +32,15 @@ class client_tun:
         self._tun.mtu = mtu
         self._tun.persist(True)
         self._tun.up()
-        self.speed = 0.8
+        self.speed = 0.5
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.status=0
-        self.sta=0
 
     def run(self):
         mtu = self._tun.mtu
         r = [self._tun, self._socket]
         w = []
         x = []
-        data_out = b''
+        data_to_tun = b''
         data_to_socket = b''
         last_blank = time.time()
         while True:
@@ -64,21 +49,18 @@ class client_tun:
             if self._tun in r:
                 data_to_socket = self._tun.read(mtu)
             if self._socket in r:
-                self.sta=time.time()
-                self.status=1
-                data_out, target_addr = self._socket.recvfrom(65532)
-                dns_response = dns.message.from_wire(data_out)
+                data_to_tun, target_addr = self._socket.recvfrom(65532)
+                dns_response = dns.message.from_wire(data_to_tun)
                 if dns_response.answer:
                     txt_record = dns_response.answer[0]
-                    data_out = coder.b64decode(str(txt_record.items[0]))
+                    data_to_tun = coder.b64decode(str(txt_record.items[0]))
                 else:
-                    data_out = b''
+                    data_to_tun = b''
 
-            if self._tun in w :
-
-                self._tun.write(data_out)
-                data_out = b''
-            if self._socket in w or (time.time()-self.sta)>0.1:
+            if self._tun in w:
+                self._tun.write(data_to_tun)
+                data_to_tun = b''
+            if self._socket in w:
                 encoded_data_to_socket = coder.b64encode(data_to_socket)
                 split_labels = [str(encoded_data_to_socket[i:i + label_len], encoding='ascii')
                                 for i in range(0, len(encoded_data_to_socket), label_len)]
@@ -92,8 +74,7 @@ class client_tun:
 
             r = []
             w = []
-            self.status=0
-            if data_out:
+            if data_to_tun:
                 w.append(self._tun)
             else:
                 r.append(self._socket)
